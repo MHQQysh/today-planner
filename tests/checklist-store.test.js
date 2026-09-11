@@ -1,0 +1,4 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {createStore} from '../src/checklist-store.js';
+test('清单按日期和规划分组保存，阻止旧版本覆盖，删除规划清理关联项',async()=>{const values=new Map();const storage={getItem:k=>values.get(k),setItem:(k,v)=>values.set(k,v)};const s=createStore(null,storage);await s.save('boards',{id:'b',title:'论文',color:'blue'});await s.save('items',{id:'i',title:'实验',day:null,board_id:'b',done:false});await s.save('items',{id:'d',title:'今日阅读',day:'2026-09-11',board_id:null,done:false});const before=await s.list();await s.save('items',{...before.items[0],done:true},before.items[0]);await assert.rejects(()=>s.save('items',{...before.items[0],title:'过期修改'},before.items[0]));await s.remove('boards',before.boards[0]);const after=await s.list();assert.equal(after.boards.length,0);assert.equal(after.items.length,1);assert.equal(after.items[0].day,'2026-09-11');});
