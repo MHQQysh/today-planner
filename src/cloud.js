@@ -1,6 +1,7 @@
 import {createClient} from '@supabase/supabase-js';
+import {publicConfig} from './public-config.js';
 const configKey='today-cloud-config';
-export function readConfig(){try{return JSON.parse(localStorage.getItem(configKey))||{url:import.meta.env.VITE_SUPABASE_URL||'',key:import.meta.env.VITE_SUPABASE_ANON_KEY||''};}catch{return {url:'',key:''};}}
+export function readConfig(){try{return JSON.parse(localStorage.getItem(configKey))||{url:import.meta.env.VITE_SUPABASE_URL||publicConfig.url,key:import.meta.env.VITE_SUPABASE_ANON_KEY||publicConfig.key};}catch{return publicConfig;}}
 export function saveConfig(url,key){if(!/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/.test(url))throw Error('请填写 https://项目编号.supabase.co 格式的项目地址');if(key.startsWith('sb_secret_'))throw Error('不能使用 Secret key，请使用 Publishable key');if(!key.startsWith('sb_publishable_')){try{const payload=JSON.parse(atob(key.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));if(payload.role!=='anon')throw Error();}catch{throw Error('请填写有效的 Publishable key 或 anon 公钥');}}localStorage.setItem(configKey,JSON.stringify({url:url.replace(/\/$/,''),key}));}
 const config=readConfig();
 export const cloud=config.url&&config.key?createClient(config.url,config.key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}}):null;
