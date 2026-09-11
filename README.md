@@ -1,47 +1,35 @@
-# 今日 · 公开共享日历
+# 今日 · 计划清单
 
-左侧 Tasks 不需要日期或时间；右侧可以点击或拖选时间段添加规划。电脑默认周视图，手机默认单日。
+网站：https://shihongyuan.cn/today-planner/
 
-## 当前模式
+上半部分为按日期保存的今日规划，逐条添加、编辑、完成和删除。下半部分为可左右滑动的长期规划卡片，可以自定义月规划、论文规划等，每张卡片独立维护步骤。手机电脑使用同一份云端数据，无需登录，所有访问者都可以编辑。
 
-无需登录。所有访问者共同查看、添加、修改和删除同一份时间规划及 Tasks。请只放愿意公开的内容。
+## 使用
 
-共享表为 `shared_plans`、`shared_tasks`，不使用账号身份。旧版私人 `plans`、`tasks` 表保持原样，不自动公开。原有本机记录可在设置中点击“将本机内容公开到共享看板”导入。
+- 今日规划使用左右日期按钮回看历史，不会在第二天删除昨天的记录。
+- 点击“新建规划”添加卡片；卡片右上角“···”可修改名称、颜色或删除整个规划。
+- 手机左右滑动卡片，电脑可使用左右箭头。
+- 设置里可以立即同步或导出全部清单。正常情况下每 15 秒和返回窗口时同步。
+- 本机预览地址加 `?preview=1`，仅写入当前标签页的临时存储，不与云端共享。
 
-## 配置云端
+## 数据库
 
-1. Supabase SQL Editor 中执行 `supabase-shared.sql`。这会创建共享表，并通过 RLS 明确允许匿名访问者读写共享表。
-2. 网页构建时提供 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY`（Publishable key / anon 公钥），或在网页设置中填写。不要使用 Secret / service_role key。
-3. 不需要 GitHub OAuth、Client Secret、登录或登录返回地址。
-4. 两台设备打开同一个发布后的网址，就会读取相同共享表。每 15 秒及窗口重新聚焦时刷新。
+首次执行 `supabase-checklists.sql`，建立 planning_boards 和 checklist_items，并从历史 shared_plans/shared_tasks 迁入已有记录，保留旧表。此迁移已经在当前线上项目执行成功，请勿反复执行，以免已删除的历史记录再次导入。
 
-## 本地预览与验证
+共享权限由 RLS 明确授予匿名访问者；不要将隐私内容放入此公开共享看板。修改使用记录版本检查，避免静默覆盖另一设备的修改。
 
-安装 Node.js 22 或更新版本后运行：
+## 开发与验证
 
 ```sh
 npm install
 npm run dev
 npm test
 npm run build
+node tests/checklists-browser.mjs
 ```
 
-浏览器测试使用本机 Edge：`node tests/browser.mjs` 验证本机模式；`node tests/shared-browser.mjs` 通过模拟云端验证两个独立浏览器的匿名共享读写、删除和写入失败。
+浏览器测试使用本机 Microsoft Edge。旧日历模块及相关测试保留供历史参考，当前入口为 src/checklists.js。
 
-## GitHub Pages 发布
+## 发布
 
-1. 创建公开仓库并上传项目文件，默认分支为 main。不要上传 node_modules、dist、.env.local 或私密密钥。
-2. Settings → Pages 中 Source 选择 GitHub Actions。
-3. Settings → Secrets and variables → Actions → Variables 添加上述两个 VITE 变量，仅使用公开密钥。
-4. 推送 main 后发布工作流自动测试、构建与发布，网站地址见 Actions 或 Settings → Pages。
-
-## 保存与限制
-
-- 没有云端配置时使用本机存储；清除浏览器数据会删除本机记录，建议导出备份。
-- 已配置云端但权限、建表或网络有问题时会明确报错，不会静默切换本机并假装同步。
-- 写入失败保留编辑草稿；离线不提供云端写入排队。
-- 编辑及删除检查记录版本，避免覆盖另一台设备已做的修改。
-- 导入同编号记录时保留云端版本。导出包含所有共享规划与任务。
-- Supabase 免费项目可能因一周不活跃暂停，需去控制台恢复。
-- `supabase.sql` 为历史私人模式脚本；当前使用 `supabase-shared.sql`。
-`n手机与电脑均支持顶部日／周／月视图切换，自动记住当前浏览器的选择。手机周视图左右滑动；月视图点日期进入单日，点＋新增，点计划编辑。
+推送 main 自动触发 GitHub Pages 工作流。公开连接配置在 src/public-config.js；可用 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY 构建变量覆盖。只使用 Publishable key / anon 公钥，不放管理员密钥。
