@@ -1,0 +1,9 @@
+import {createClient} from '@supabase/supabase-js';
+const configKey='today-cloud-config';
+export function readConfig(){try{return JSON.parse(localStorage.getItem(configKey))||{url:import.meta.env.VITE_SUPABASE_URL||'',key:import.meta.env.VITE_SUPABASE_ANON_KEY||''};}catch{return {url:'',key:''};}}
+export function saveConfig(url,key){if(!/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/.test(url))throw Error('请填写 https://项目编号.supabase.co 格式的项目地址');if(key.startsWith('sb_secret_'))throw Error('不能使用 Secret key，请使用 Publishable key');if(!key.startsWith('sb_publishable_')){try{const payload=JSON.parse(atob(key.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));if(payload.role!=='anon')throw Error();}catch{throw Error('请填写有效的 Publishable key 或 anon 公钥');}}localStorage.setItem(configKey,JSON.stringify({url:url.replace(/\/$/,''),key}));}
+const config=readConfig();
+export const cloud=config.url&&config.key?createClient(config.url,config.key,{auth:{flowType:'pkce'}}):null;
+export async function listCloud(day){let query=cloud.from('plans').select('*').order('start');if(day)query=query.eq('day',day);const {data,error}=await query;if(error)throw error;return data.map(p=>({...p,start:p.start.slice(0,5),end:p.end.slice(0,5)}));}
+export async function writeCloud(plan,userId,previous){const record={...plan,user_id:userId,updated_at:new Date().toISOString()};let query=previous?cloud.from('plans').update(record).eq('id',plan.id).eq('updated_at',previous.updated_at):cloud.from('plans').insert(record);const {data,error}=await query.select();if(error)throw error;if(!data.length)throw Error('这条计划已在另一台设备修改或删除，请关闭编辑并刷新后重试');}
+export async function deleteCloud(plan){const {data,error}=await cloud.from('plans').delete().eq('id',plan.id).eq('updated_at',plan.updated_at).select('id');if(error)throw error;if(!data.length)throw Error('计划已在其他设备修改，请刷新后重试');}
