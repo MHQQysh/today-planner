@@ -1,18 +1,17 @@
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 const browser=await chromium.launch({headless:true,channel:'msedge'});
-try {
-for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){
+try{for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){
  const context=await browser.newContext({viewport});const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('http://127.0.0.1:5173/');await page.getByText('今天的时间，由你安排').waitFor();
- await page.locator('#add').click();await page.locator('#title').fill('阅读论文 <重要>');await page.locator('#start').fill('09:00');await page.locator('#end').fill('10:30');await page.locator('#note').fill('完成方法部分');await page.locator('#save').click();await page.locator('.plan-content h3').waitFor();assert.equal(await page.locator('.plan-content h3').textContent(),'阅读论文 <重要>');
- await page.reload();await page.locator('.plan-content h3').waitFor();assert.equal(await page.locator('.plan').count(),1);
- await page.getByRole('button',{name:'编辑',exact:true}).click();await page.locator('#title').fill('精读方法');await page.locator('#save').click();await page.getByRole('heading',{name:'精读方法',exact:true}).last().waitFor();
- await page.locator('.check').click();await page.waitForFunction(()=>document.querySelector('.check').getAttribute('aria-pressed')==='true');
- await page.locator('#next').click();await page.getByText('今天的时间，由你安排').waitFor();await page.locator('#prev').click();await page.locator('.plan').waitFor();
- assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
- await page.screenshot({path:viewport.width===390?'preview-mobile.png':'preview-desktop.png',fullPage:true});
- await page.locator('#settings').click();const downloadPromise=page.waitForEvent('download');await page.locator('#export').click();assert.ok((await downloadPromise).suggestedFilename().endsWith('.json'));await page.locator('[data-close="settings-dialog"]').click();
- page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'删除',exact:true}).click();await page.getByText('今天的时间，由你安排').waitFor();await page.reload();await page.getByText('今天的时间，由你安排').waitFor();assert.deepEqual(errors,[]);console.log(`PASS ${viewport.width}px: create/edit/complete/date/export/delete/persistence/no overflow/no JS errors`);await context.close();
-}
-}finally{await browser.close();}
+ await page.goto('http://127.0.0.1:5173/');await page.locator('.day-column').first().waitFor();assert.equal(await page.locator('.day-column').count(),viewport.width===390?1:7);
+ await page.locator('#task-title').fill('不需要时间的任务');await page.locator('#task-form button').click();await page.locator('.task-row').waitFor();await page.locator('.task-check').click();await page.waitForFunction(()=>document.querySelector('.task-check').getAttribute('aria-pressed')==='true');
+ await page.locator('.hour-slot[data-minute="540"]').first().click({position:{x:10,y:2}});await page.locator('#editor').waitFor();assert.equal(await page.locator('#start').inputValue(),'09:00');assert.equal(await page.locator('#end').inputValue(),'10:00');await page.locator('#title').fill('精读论文');await page.locator('#save').click();await page.locator('.calendar-event').waitFor();
+ await page.reload();await page.locator('.calendar-event').waitFor();assert.equal(await page.locator('.task-row').count(),1);await page.locator('.calendar-event').click();await page.locator('#title').fill('修改后的规划');await page.locator('#save').click();await page.getByText('修改后的规划',{exact:true}).waitFor();
+ await page.locator('.calendar-event').click();await page.locator('#toggle-event').click();await page.locator('.event-done').waitFor();
+ if(viewport.width===1440){await page.locator('#calendar-scroll').evaluate(el=>el.scrollTop=7*64);const col=page.locator('.day-column').nth(2);const box=await col.boundingBox();await page.mouse.move(box.x+box.width/2,box.y+11*64+2);await page.mouse.down();await page.mouse.move(box.x+box.width/2,box.y+12*64+2,{steps:8});await page.mouse.up();await page.locator('#editor').waitFor();assert.equal(await page.locator('#start').inputValue(),'11:00');assert.equal(await page.locator('#end').inputValue(),'12:15');await page.locator('#title').fill('拖选时间规划');await page.locator('#save').click();await page.getByText('拖选时间规划',{exact:true}).waitFor();}
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:viewport.width===390?'preview-mobile.png':'preview-desktop.png',fullPage:true});
+ await page.locator('#next').click();await page.waitForFunction(()=>!document.querySelector('.calendar-event'));assert.equal(await page.locator('.task-row').count(),1);await page.locator('#prev').click();await page.locator('.calendar-event').first().waitFor();
+ await page.locator('.calendar-event').first().click();page.once('dialog',d=>d.accept());await page.locator('#delete-event').click();await page.waitForFunction(()=>!document.querySelector('#editor').open);
+ await page.locator('#settings').click();const download=page.waitForEvent('download');await page.locator('#export').click();assert.ok((await download).suggestedFilename().endsWith('.json'));await page.locator('[data-close="settings-dialog"]').click();page.once('dialog',d=>d.accept());await page.locator('.task-delete').click();await page.waitForFunction(()=>!document.querySelector('.task-row'));assert.deepEqual(errors,[]);console.log('PASS calendar + tasks '+viewport.width+'px');await context.close();
+}}finally{await browser.close();}
+
