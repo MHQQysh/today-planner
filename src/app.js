@@ -1,11 +1,13 @@
 import './style.css';
 import './calendar.css';
-import {mountCalendar,renderCalendar,bindSelection,weekDays} from './calendar.js';
+import './views.css';
+import {mountCalendar,renderCalendar,bindSelection,weekDays,moveDate} from './calendar.js';
 import {categories,localDate,shiftDate,minutes,validate,overlaps,stats} from './model.js';
 import {cloud,readConfig,saveConfig,listCloud,writeCloud,deleteCloud} from './cloud.js';
 mountCalendar();
 const $=id=>document.getElementById(id), localKey='today-plans-v1';
-let mode=matchMedia('(max-width:700px)').matches?'day':'week',miniMonth=localDate().slice(0,7),tasks=[],draftDay=null;
+const savedMode=localStorage.getItem('today-view-mode');
+let mode=['day','week','month'].includes(savedMode)?savedMode:(matchMedia('(max-width:700px)').matches?'day':'week'),miniMonth=localDate().slice(0,7),tasks=[],draftDay=null;
 let day=localDate(),plans=[],editing=null,busy=false,loadVersion=0,toastTimer;
 const colors={work:'#7891b1',life:'#c5a16f',health:'#86a17d',rest:'#aa96b9'};
 function localPlans(){const raw=localStorage.getItem(localKey);if(!raw)return [];const data=JSON.parse(raw);if(!Array.isArray(data))throw Error('本机数据格式异常，请先导出备份');return data;}
@@ -21,7 +23,7 @@ function changeDay(value){if(!value||!/^\d{4}-\d{2}-\d{2}$/.test(value))return;d
 for(const button of document.querySelectorAll('[data-close]'))button.addEventListener('click',()=>{if(!busy)$(button.dataset.close).close();});
 for(const dialog of document.querySelectorAll('dialog'))dialog.addEventListener('cancel',e=>{if(busy)e.preventDefault();});
 const settings=()=>{const config=readConfig();$('cloud-url').value=config.url;$('cloud-key').value=config.key;$('settings-dialog').showModal();};
- $('settings').onclick=settings;$('account').onclick=settings;$('add').onclick=()=>openEditor();$('prev').onclick=()=>changeDay(shiftDate(day,mode==='week'?-7:-1));$('next').onclick=()=>changeDay(shiftDate(day,mode==='week'?7:1));$('today').onclick=()=>changeDay(localDate());$('day').onchange=e=>changeDay(e.target.value);
+ $('settings').onclick=settings;$('account').onclick=settings;$('add').onclick=()=>openEditor();$('prev').onclick=()=>changeDay(moveDate(day,mode,-1));$('next').onclick=()=>changeDay(moveDate(day,mode,1));$('today').onclick=()=>changeDay(localDate());$('day').onchange=e=>changeDay(e.target.value);
  $('plan-form').onsubmit=async e=>{e.preventDefault();if(busy)return;const plan={id:editing?.id||crypto.randomUUID(),day:editing?.day||draftDay||day,title:$('title').value.trim(),start:$('start').value,end:$('end').value,category:$('category').value,note:$('note').value.trim(),done:editing?.done||false};const error=validate(plan);if(error){$('form-error').textContent=error;return;}if(overlaps(plan,plans)&&!confirm('这个时间段与已有计划重叠，仍然保存吗？'))return;busy=true;$('save').disabled=true;$('form-error').textContent='';try{await save(plan,editing);$('editor').close();toast(cloud?'计划已保存到云端':'计划已保存到本机');}catch(error){$('form-error').textContent='未保存：'+error.message;}finally{busy=false;$('save').disabled=false;}};
  $('plans').onclick=e=>{const button=e.target.closest('[data-action]');if(!button||busy)return;const plan=plans.find(p=>p.id===button.dataset.id);if(!plan)return;if(button.dataset.action==='edit')openEditor(plan);if(button.dataset.action==='toggle')action(async()=>{await save({...plan,done:!plan.done},plan);});if(button.dataset.action==='delete'&&confirm(`删除“${plan.title}”？`))action(async()=>{if(cloud)await deleteCloud(plan);else localStorage.setItem(localKey,JSON.stringify(localPlans().filter(p=>p.id!==plan.id)));await load();toast('计划已删除');});};
  $('config-form').onsubmit=e=>{e.preventDefault();try{saveConfig($('cloud-url').value.trim(),$('cloud-key').value.trim());location.reload();}catch(error){toast(error.message);}};
@@ -38,12 +40,15 @@ $('task-form').onsubmit=e=>{e.preventDefault();const title=$('task-title').value
 $('tasks').onclick=e=>{const b=e.target.closest('[data-task-action]');if(!b)return;const task=tasks.find(t=>t.id===b.dataset.id);if(!task)return;action(async()=>{if(b.dataset.taskAction==='toggle')await saveTask({...task,done:!task.done},task);if(b.dataset.taskAction==='edit'){const title=prompt('修改任务名称',task.title);if(title?.trim()){if(title.trim().length>120)throw Error('任务名称最多 120 字');await saveTask({...task,title:title.trim()},task);}}if(b.dataset.taskAction==='delete'&&confirm('删除这个任务？')){if(cloud){const {data,error}=await cloud.from('shared_tasks').delete().eq('id',task.id).eq('updated_at',task.updated_at).select('id');if(error)throw error;if(!data.length)throw Error('任务已在另一台设备改动，请刷新后重试');}else localStorage.setItem(taskKey,JSON.stringify(localTasks().filter(t=>t.id!==task.id)));await load();}});};
 for(const id of ['calendar-days','mini-days'])$(id).onclick=e=>{const b=e.target.closest('[data-day]');if(b)changeDay(b.dataset.day);};
 for(const [id,amount] of [['mini-prev',-1],['mini-next',1]])$(id).onclick=()=>{const date=new Date(miniMonth+'-01T12:00:00');date.setMonth(date.getMonth()+amount);miniMonth=localDate(date).slice(0,7);render();};
-$('view-mode').onchange=e=>{mode=e.target.value;render();};
-matchMedia('(max-width:700px)').addEventListener('change',e=>{mode=e.matches?'day':'week';render();});
+$('view-mode').onchange=e=>setMode(e.target.value);
+function setMode(value){mode=value;localStorage.setItem('today-view-mode',mode);render();$('calendar-scroll').scrollLeft=0;$('calendar-days').style.transform='';$('calendar-scroll').scrollTop=mode==='month'?0:7*64;}
+$('calendar-scroll').addEventListener('scroll',()=>{$('calendar-days').style.transform='translateX(-'+$('calendar-scroll').scrollLeft+'px)';});
+$('plans').addEventListener('click',e=>{const add=e.target.closest('[data-add-day]');if(add)openEditor(null,add.dataset.addDay);const date=e.target.closest('[data-month-day]');if(date){changeDay(date.dataset.monthDay);setMode('day');}});
 bindSelection((date,start,end)=>openEditor(null,date,start,end));
 $('toggle-event').onclick=()=>action(async()=>{if(editing){await save({...editing,done:!editing.done},editing);$('editor').close();}});
 $('delete-event').onclick=()=>action(async()=>{if(!editing||!confirm('删除这段时间规划？'))return;if(cloud)await deleteCloud(editing);else localStorage.setItem(localKey,JSON.stringify(localPlans().filter(p=>p.id!==editing.id)));await load();$('editor').close();});
 render();
 await load();
 
-$('calendar-scroll').scrollTop=7*64;
+$('calendar-scroll').scrollTop=mode==='month'?0:7*64;
+
