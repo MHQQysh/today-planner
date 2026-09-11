@@ -2,7 +2,7 @@ import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
 const browser=await chromium.launch({headless:true,channel:'msedge'});
 try{for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){
- const context=await browser.newContext({viewport});const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const context=await browser.newContext({viewport});await context.addInitScript(()=>localStorage.setItem('today-cloud-config',JSON.stringify({url:'',key:''})));const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:5173/');await page.locator('.day-column').first().waitFor();assert.equal(await page.locator('.day-column').count(),viewport.width===390?1:7);
  await page.locator('#task-title').fill('不需要时间的任务');await page.locator('#task-form button').click();await page.locator('.task-row').waitFor();await page.locator('.task-check').click();await page.waitForFunction(()=>document.querySelector('.task-check').getAttribute('aria-pressed')==='true');
  await page.locator('.hour-slot[data-minute="540"]').first().click({position:{x:10,y:2}});await page.locator('#editor').waitFor();assert.equal(await page.locator('#start').inputValue(),'09:00');assert.equal(await page.locator('#end').inputValue(),'10:00');await page.locator('#title').fill('精读论文');await page.locator('#save').click();await page.locator('.calendar-event').waitFor();
